@@ -31,10 +31,10 @@ from typing import Sequence, Dict, Union
 
 from rdkit import Chem
 
-from .results import ResultsDb
-from .parse import parse_ms_data
-from .algorithms import subset_sum
-from .databases import SubstructureDb
+from results import ResultsDb
+from parse import parse_ms_data
+from algorithms import subset_sum
+from databases import SubstructureDb
 
 
 def combine_mfs(precise_mass_grp, db, table_name, accuracy):
@@ -325,17 +325,6 @@ def annotate_msn(msn_data: Union[str, os.PathLike, Dict[str, Dict[str, Union[int
     results_db = ResultsDb(path_out, retain_substructures=retain_substructures)
     results_db.create_results_db()
 
-    # prepare temporary table here - will only be generated once in case of multiple input
-    table_name = gen_subs_table(
-        db=db,
-        ha_min=ha_min,
-        ha_max=ha_max,
-        max_degree=max_degree,
-        max_atoms_available=max_atoms_available,
-        minimum_frequency=minimum_frequency,
-        max_mass=None
-    )
-
     for i, ms in enumerate(parse_ms_data(msn_data)):
         
         if ms is None:
@@ -343,6 +332,19 @@ def annotate_msn(msn_data: Union[str, os.PathLike, Dict[str, Dict[str, Union[int
 
         results_db.add_ms(msn_data, ms["ms_id"], i, [ppm, ha_min, ha_max, max_atoms_available, max_degree,
                                                      max_n_substructures, hydrogenation_allowance, isomeric_smiles])
+
+        # prepare temporary table here - will only be generated once in case of multiple input
+        print(ms["ms_id"])
+        table_name = gen_subs_table(
+            db=db,
+            ha_min=ha_min,
+            ha_max=ha_max,
+            max_degree=max_degree,
+            max_atoms_available=max_atoms_available,
+            minimum_frequency=minimum_frequency,
+            max_mass=None,
+            hmdb_id=ms["ms_id"]
+        )
 
         for j, fragment_mass in enumerate(ms["neutral_fragment_masses"]):
 
@@ -875,7 +877,7 @@ def refine_masses_prescribed(substructure_subsets, mf, exact_mass, prescribed_su
     return substructure_subsets
 
 
-def gen_subs_table(db, ha_min, ha_max, max_degree, max_atoms_available, max_mass, table_name="subset",
+def gen_subs_table(db, ha_min, ha_max, max_degree, max_atoms_available, max_mass, hmdb_id, table_name="subset",
                    minimum_frequency=None):
     """
     Generate a temporary secondary substructure table restricted by a set of parameters. Generated as an initial step
@@ -940,6 +942,9 @@ def gen_subs_table(db, ha_min, ha_max, max_degree, max_atoms_available, max_mass
         max_mass_statement = """
                                 AND exact_mass__1 < %s""" % str(max_mass)
 
+    hmdb_statement = """
+                        AND substructure_id in (SELECT substructure_id FROM hmdbid_substructures WHERE hmdbid = '%s')""" % hmdb_id
+
     db.temporary_table_names.append(table_name + "_substructures")
 
     db.cursor.execute("""CREATE TABLE {} (
@@ -971,7 +976,7 @@ def gen_subs_table(db, ha_min, ha_max, max_degree, max_atoms_available, max_mass
                              SELECT * 
                                  FROM substructures
                                  WHERE atoms_available <= {}
-                                 AND valence <= {}{}{}{}{}
+                                 AND valence <= {}{}{}{}{}{}
                       """.format(
                              table_name + "_substructures",
                              max_atoms_available,
@@ -979,7 +984,8 @@ def gen_subs_table(db, ha_min, ha_max, max_degree, max_atoms_available, max_mass
                              max_mass_statement,
                              freq_statement,
                              ha_min_statement,
-                             ha_max_statement
+                             ha_max_statement,
+                             hmdb_statement
                       ))
 
     db.temporary_table_names.append(table_name + "_substructure_ions")

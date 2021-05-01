@@ -33,8 +33,8 @@ from rdkit import Chem
 from rdkit.Chem import Recap
 from rdkit.Chem import BRICS
 
-from .parse import parse_xml
-from .auxiliary import calculate_complete_multipartite_graphs, graph_to_ri, graph_info, sort_subgraphs
+from parse import parse_xml
+from auxiliary import calculate_complete_multipartite_graphs, graph_to_ri, graph_info, sort_subgraphs
 
 
 class SubstructureDb:
